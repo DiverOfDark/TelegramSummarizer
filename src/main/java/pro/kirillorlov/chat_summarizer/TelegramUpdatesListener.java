@@ -189,6 +189,8 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         if (requests.isEmpty()) {
             String summarized = summarize(messages, users);
             logger.info(summarized);
+            String messagesCount = getMessagesCountByUser(messages, users);
+            logger.info("Топ контрибьюторов:\n{}", messagesCount);
         } else {
             TdApi.GetUser getUser = requests.removeFirst();
             client.send(getUser, onUser -> {
@@ -214,6 +216,18 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 .stream().map(t-> String.join("", t)).toList();
 
         return summarizeChatDumps(new ArrayList<>(chatDumps));
+    }
+
+    private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users) {
+        return messages.values()
+                .stream()
+                .filter(message -> toChatString(message, users) != null)
+                .collect(Collectors.groupingBy(message -> getUserAsString(message, users), Collectors.counting()))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .map(entry -> "%s: %d сообщений".formatted(entry.getKey(), entry.getValue()))
+                .collect(Collectors.joining("\n"));
     }
 
     private String summarizeChatDumps(List<String> chatDumps) {
@@ -258,7 +272,6 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
 
     private String toChatString(TdApi.Message message, Map<Long, TdApi.User> users) {
         String content = "<unsupported>";
-        String sender = "User";
         switch (message.content) {
             case TdApi.MessageText messageText -> content = messageText.text.text;
             case TdApi.MessagePhoto messagePhoto -> content = "!photo.jpg; " + messagePhoto.caption.text;
@@ -270,18 +283,24 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         }
         Date date1 = new Date(message.date * 1000L);
         String date = new SimpleDateFormat("hh:mm").format(date1);
+
+        String sender = getUserAsString(message, users);
+        return String.format("%s %s: %s\n", date, sender, content);
+    }
+
+    private String getUserAsString(TdApi.Message message, Map<Long, TdApi.User> users) {
+        String sender = "User";
         switch (message.senderId) {
             case TdApi.MessageSenderUser messageSenderUser -> {
                 sender = Long.toString(messageSenderUser.userId);
                 if (users.containsKey(messageSenderUser.userId)) {
                     TdApi.User userDetails = users.get(messageSenderUser.userId);
-                    sender = Stream.of(userDetails.firstName, userDetails.lastName).filter(t->!StringUtils.isEmpty(t)).distinct().toList().getFirst();
+                    sender = Stream.of(userDetails.firstName, userDetails.lastName).filter(t -> !StringUtils.isEmpty(t)).distinct().toList().getFirst();
                 }
             }
-            case null, default -> logger.warn("Unsupported content " + message.content);
+            case null, default -> logger.warn("Unsupported content {}", message.content);
         }
-
-        return String.format("%s %s: %s\n", date, sender, content);
+        return sender;
     }
 
     @Override
