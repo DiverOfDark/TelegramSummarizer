@@ -37,7 +37,7 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
     private SimpleTelegramClient client;
     private TelegramBot bot;
 
-    private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 
     public TelegramUpdatesListener(MessagesRepository messagesRepository, LlamaController controller) {
         this.messagesRepository = messagesRepository;
@@ -134,11 +134,11 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         getChats.limit = 1000;
         logger.info("Init user client");
 
-        client.send(getChats).whenCompleteAsync((a, b) -> {
+        client.send(getChats).whenCompleteAsync((a, _) -> {
             for (long l : a.chatIds) {
                 TdApi.GetChat function = new TdApi.GetChat();
                 function.chatId = l;
-                client.send(function).whenCompleteAsync((c, d) -> {
+                client.send(function).whenCompleteAsync((c, _) -> {
                     logger.info("{} -> {} chat loaded", c.id, c.title);
                     if ("Предпоследнее пристанище".equals(c.title)) {
                         fetchHistory(c);
@@ -161,7 +161,7 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 return isOld || hasDigest;
             }).findAny();
             if (any.isPresent()) {
-                List<Long> badMessages = messages.entrySet().stream().takeWhile(t -> t.getValue() != any.get()).map(t -> t.getKey()).toList();
+                List<Long> badMessages = messages.entrySet().stream().takeWhile(t -> t.getValue() != any.get()).map(Map.Entry::getKey).toList();
                 badMessages.forEach(messages::remove);
                 enrichUsers(messages);
                 return;
@@ -188,9 +188,11 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
     private void enrichUsers(TreeMap<Long, TdApi.Message> messages, TreeMap<Long, TdApi.User> users, List<TdApi.GetUser> requests) {
         if (requests.isEmpty()) {
             String summarized = summarize(messages, users);
-            logger.info(summarized);
-            String messagesCount = getMessagesCountByUser(messages, users);
-            logger.info("Топ контрибьюторов:\n{}", messagesCount);
+            String messagesCount = getMessagesCountByUser(messages, users, 5);
+
+            String messageToCopyPaste = "#дайджест\n" + summarized + "\n\nВ основном писали:\n" + messagesCount;
+
+            logger.info(messageToCopyPaste);
         } else {
             TdApi.GetUser getUser = requests.removeFirst();
             client.send(getUser, onUser -> {
@@ -218,7 +220,8 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         return summarizeChatDumps(new ArrayList<>(chatDumps));
     }
 
-    private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users) {
+    private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users, int limit) {
+        AtomicInteger integer = new AtomicInteger(limit);
         return messages.values()
                 .stream()
                 .filter(message -> toChatString(message, users) != null)
@@ -227,6 +230,7 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 .stream()
                 .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
                 .map(entry -> "%s: %d сообщений".formatted(entry.getKey(), entry.getValue()))
+                .takeWhile(_ -> integer.getAndDecrement() > 0)
                 .collect(Collectors.joining("\n"));
     }
 
@@ -241,9 +245,8 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         }
 
         String together = String.join("\n", results);
-        if (results.size() > 0) {
-            String result2 = controller.getCompletion(together, controller.SUMMARIZE_N2_PROMPT);
-            return result2;
+        if (!results.isEmpty()) {
+            return controller.getCompletion(together, controller.SUMMARIZE_N2_PROMPT);
         }
         return together;
     }
