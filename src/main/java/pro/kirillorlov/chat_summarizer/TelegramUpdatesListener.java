@@ -134,11 +134,11 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
         getChats.limit = 1000;
         logger.info("Init user client");
 
-        client.send(getChats).whenCompleteAsync((a, _) -> {
+        client.send(getChats).whenCompleteAsync((a, ignored) -> {
             for (long l : a.chatIds) {
                 TdApi.GetChat function = new TdApi.GetChat();
                 function.chatId = l;
-                client.send(function).whenCompleteAsync((c, _) -> {
+                client.send(function).whenCompleteAsync((c, ignored1) -> {
                     logger.info("{} -> {} chat loaded", c.id, c.title);
                     if ("Предпоследнее пристанище".equals(c.title)) {
                         fetchHistory(c);
@@ -230,14 +230,15 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 .stream()
                 .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
                 .map(entry -> "%s: %d сообщений".formatted(entry.getKey(), entry.getValue()))
-                .takeWhile(_ -> integer.getAndDecrement() > 0)
+                .takeWhile(ignored -> integer.getAndDecrement() > 0)
                 .collect(Collectors.joining("\n"));
     }
 
     private String summarizeChatDumps(List<String> chatDumps) {
         List<String> results = new ArrayList<>();
         while(!chatDumps.isEmpty()) {
-            logger.info(STR."Left chunks - \{chatDumps.size()}"); String chat = chatDumps.removeFirst();
+            logger.info(String.format("Left chunks - %s", chatDumps.size()));
+            String chat = chatDumps.removeFirst();
             String result = controller.getCompletion(chat, controller.SUMMARIZE_CHAT_PROMPT);
 
             results.add(result);

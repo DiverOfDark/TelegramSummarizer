@@ -33,7 +33,7 @@ public class LlamaController {
         Response<String> generate = languageModel.generate(chat + prompt);
         String content = generate.content();
         long after = System.currentTimeMillis();
-        logger.info(STR."Query took \{Duration.ofMillis(after - before)}");
+        logger.info(String.format("Query took %s", Duration.ofMillis(after - before)));
         return content;
     }
 }
