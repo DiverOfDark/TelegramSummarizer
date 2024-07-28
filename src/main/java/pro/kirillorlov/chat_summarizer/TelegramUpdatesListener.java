@@ -192,6 +192,15 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
 
             String messageToCopyPaste = "#дайджест\n" + summarized + "\n\nВ основном писали:\n" + messagesCount;
 
+            TdApi.SendMessage message = new TdApi.SendMessage();
+            message.chatId = messages.values().stream().findFirst().orElse(null).chatId;
+
+            TdApi.InputMessageText inputMessageContent = new TdApi.InputMessageText();
+            inputMessageContent.text = new TdApi.FormattedText(messageToCopyPaste, new TdApi.TextEntity[0]);
+
+            message.inputMessageContent = inputMessageContent;
+            client.sendMessage(message, true);
+            System.exit(0);
             logger.info(messageToCopyPaste);
         } else {
             TdApi.GetUser getUser = requests.removeFirst();
