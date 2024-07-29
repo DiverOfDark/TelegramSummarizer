@@ -34,7 +34,7 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-ollama</artifactId>
-            <version>0.31.0</version>
+            <version>0.33.0</version>
         </dependency>
 
         <dependency>
@@ -46,7 +46,7 @@
         <dependency>
             <groupId>com.github.pengrad</groupId>
             <artifactId>java-telegram-bot-api</artifactId>
-            <version>7.4.0</version>
+            <version>7.7.0</version>
         </dependency>
 
         <dependency>
