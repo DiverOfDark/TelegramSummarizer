@@ -21,15 +21,15 @@ spec:
               image: ghcr.io/diverofdark/telegramsummarizer:master
               imagePullPolicy: Always
               volumeMounts:
-                - mountPath: /ollama/
+                - mountPath: /root/.ollama/
                   name: shared
               env:
                 - name: OLLAMA_URL
                   value: http://ollama
                 - name: USER_DATADIR
-                  value: /ollama/userbot
+                  value: /root/.ollama/userbot
                 - name: OLLAMA_PATH
-                  value: /ollama
+                  value: /root/.ollama/
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret
