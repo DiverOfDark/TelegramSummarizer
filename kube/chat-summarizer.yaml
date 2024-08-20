@@ -21,6 +21,9 @@ spec:
               volumeMounts:
                 - mountPath: /ollama/
                   name: shared
+              env:
+                - name: OLLAMA_URL
+                  value: http://ollama:11434
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret
