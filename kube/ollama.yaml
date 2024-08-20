@@ -24,9 +24,19 @@ spec:
                     values:
                       - niflheimr
                       - midgard
+      volumes:
+        - name: shared
+          persistentVolumeClaim:
+            claimName: ollama
       containers:
         - name: ollama
           image: ollama/ollama:latest
+          volumeMounts:
+            - mountPath: /root/.ollama
+              name: shared
+          resources:
+            requests:
+              memory: "8Gi"
           ports:
             - name: http
               protocol: TCP
