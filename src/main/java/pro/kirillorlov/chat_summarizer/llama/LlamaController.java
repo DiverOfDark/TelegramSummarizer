@@ -82,6 +82,7 @@ public class LlamaController {
                             logger.info("Progress: {}", status);
                         } catch (Exception e) {
                             logger.error("Error parsing response: {}", line);
+                            throw e;
                         }
                     }
 
@@ -93,7 +94,14 @@ public class LlamaController {
             e.printStackTrace();
         }
 
-        logger.info("Loaded, deleting file...");
+        logger.info("Checking that new model is available");
+
+        List<OllamaModel> listResponse = models.availableModels().content();
+        if (listResponse.stream().noneMatch(t -> t.getName().contains(props.getOllamaModelShortName()))) {
+            throw new Exception("Model not available after upload");
+        }
+
+        logger.info("Available, deleting file...");
 
         new File(modelFile).delete();
 
