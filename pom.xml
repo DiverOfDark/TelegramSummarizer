@@ -74,15 +74,27 @@
         <dependency>
             <groupId>it.tdlight</groupId>
             <artifactId>tdlight-natives</artifactId>
-            <classifier>linux_amd64_gnu_ssl1</classifier>
+            <classifier>linux_amd64_gnu_ssl3</classifier>
         </dependency>
         <!-- Example windows amd64 natives -->
-        <dependency>
-            <groupId>it.tdlight</groupId>
-            <artifactId>tdlight-natives</artifactId>
-            <classifier>windows_amd64</classifier>
-        </dependency>
     </dependencies>
+    <profiles>
+        <profile>
+            <id>win</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>it.tdlight</groupId>
+                    <artifactId>tdlight-natives</artifactId>
+                    <classifier>windows_amd64</classifier>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
     <dependencyManagement>
         <dependencies>
             <!-- Add the following dependency -->
@@ -102,12 +114,12 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <layout>JAR</layout>
                     <image>
                         <buildpacks>
                             <buildpack>paketobuildpacks/azul-zulu</buildpack>
                             <buildpack>paketobuildpacks/java</buildpack>
                         </buildpacks>
-
                         <env>
                             <BP_JVM_VERSION>21</BP_JVM_VERSION>
                             <BP_JVM_TYPE>JRE</BP_JVM_TYPE>
