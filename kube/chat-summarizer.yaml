@@ -24,7 +24,7 @@ spec:
                   name: shared
               env:
                 - name: OLLAMA_URL
-                  value: http://ollama:11434
+                  value: http://ollama/
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret
