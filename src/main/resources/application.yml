@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: chat-summarizer
+  profiles:
+    active: userbot # Change this to `tgbot` to activate the tgbot profile
+
+ollama:
+  url: http://127.0.0.1:11434
+  modelFile: https://huggingface.co/IlyaGusev/saiga_llama3_8b_gguf/resolve/main/model-q8_0.gguf
+  path: C:/dev/ollama
+
+  N1: |  
+    Это был отрывок из истории чата до настоящего момента. Ты бот для чата в телеграмме, который пишет summary про всё, о чем общались.
+    Твоя задача прислать короткие смешные тезисы о что обсуждали. Не присылай оригинальные сообщения или похожие тезисы.
+    Ответь списком без повторяющихся элементов, пиши в том же стиле что и люди в чате, на русском языке. В твоем ответе не должно быть ничего кроме списка. Максимум 5 пунктов.
+
+  N2: Это несколько списков тезисов что обсуждали сегодня в чате. Исправь нумерацию, чтобы она была консистента. Не оставляй пропуски между пунктами.
+
+---
+spring:
+  config.activate.on-profile: userbot
+
+user:
+  send: false
+  password:
+  datadir: example-tdlight-session
+  chatname: "Предпоследнее пристанище"
+
+---
+spring:
+  config.activate.on-profile: tgbot
+
+  datasource:
+    url: jdbc:h2:file:./data.h2
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-ui
+
+bot:
+  name: dod_summary_bot
+  token:

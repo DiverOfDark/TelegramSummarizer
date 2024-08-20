@@ -1,27 +1,27 @@
-package pro.kirillorlov.chat_summarizer;
+package pro.kirillorlov.chat_summarizer.bot;
 
-import com.pengrad.telegrambot.TelegramBot;
-import com.pengrad.telegrambot.UpdatesListener;
-import com.pengrad.telegrambot.model.Message;
-import com.pengrad.telegrambot.model.Update;
-import com.pengrad.telegrambot.model.message.MaybeInaccessibleMessage;
-import com.pengrad.telegrambot.request.SendMessage;
 import io.micrometer.common.util.StringUtils;
 import it.tdlight.ExceptionHandler;
-import it.tdlight.client.GenericUpdateHandler;
-import it.tdlight.client.SimpleTelegramClient;
+import it.tdlight.Init;
+import it.tdlight.Log;
+import it.tdlight.Slf4JLogMessageHandler;
+import it.tdlight.client.*;
 import it.tdlight.jni.TdApi;
+import it.tdlight.util.UnsupportedNativeLibraryException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import pro.kirillorlov.chat_summarizer.jpa.Messages;
-import pro.kirillorlov.chat_summarizer.jpa.MessagesRepository;
 import pro.kirillorlov.chat_summarizer.llama.LlamaController;
+import pro.kirillorlov.chat_summarizer.properties.UserBotProperties;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,71 +30,55 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Component
-public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHandler<TdApi.Update>, ExceptionHandler {
-    private static final Logger logger = LogManager.getLogger(TelegramUpdatesListener.class);
-    private final MessagesRepository messagesRepository;
+@Profile("userbot")
+public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHandler {
+    private static final Logger logger = LogManager.getLogger(UserBot.class);
     private final LlamaController controller;
+    private final UserBotProperties props;
     private SimpleTelegramClient client;
-    private TelegramBot bot;
 
     private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 
-    public TelegramUpdatesListener(MessagesRepository messagesRepository, LlamaController controller) {
-        this.messagesRepository = messagesRepository;
+    public UserBot(LlamaController controller, UserBotProperties props) throws UnsupportedNativeLibraryException {
         this.controller = controller;
-        // processSavedMessages();
-    }
+        this.props = props;
 
-    public void setClient(SimpleTelegramClient client) {
-        this.client = client;
-    }
+        Init.init();
+        Log.setLogMessageHandler(1, new Slf4JLogMessageHandler());
+        APIToken apiToken = APIToken.example();
+        TDLibSettings settings = TDLibSettings.create(apiToken);
 
-    @Override
-    public int process(List<Update> list) {
-        int processedId = 0;
-        for (Update update : list) {
-            if (update.message() != null) {
-                Message message = update.message();
-                Messages messages = new Messages();
-                messages.setSource(message);
-                messages.setMessageId(message.messageId());
-                messages.setTelegramChatId(message.chat().id());
-                messagesRepository.save(messages);
-            }
-            processedId = update.updateId();
-        }
-        return processedId;
-    }
+        Path sessionPath = Paths.get(props.getDatadir());
+        settings.setDatabaseDirectoryPath(sessionPath.resolve("data"));
+        settings.setDownloadedFilesDirectoryPath(sessionPath.resolve("downloads"));
 
-    public void processSavedMessages() {
-        List<Messages> all = messagesRepository.findAll();
+        try (SimpleTelegramClientFactory simpleTelegramClientFactory = new SimpleTelegramClientFactory()) {
+            SimpleTelegramClientBuilder clientBuilder = simpleTelegramClientFactory.builder(settings);
 
-        Date threeDaysAgo = new Date(Instant.now().minus(3, ChronoUnit.DAYS).toEpochMilli());
+            // Add an example update handler that prints when the bot is started
+            clientBuilder.addUpdatesHandler(this);
+            clientBuilder.addDefaultExceptionHandler(this);
+            clientBuilder.addUpdateExceptionHandler(this);
+            clientBuilder.setClientInteraction((inputParameter, parameterInfo) -> CompletableFuture.supplyAsync(() -> {
+                switch (inputParameter) {
+                    case NOTIFY_LINK -> {
+                        ParameterInfoNotifyLink link = (ParameterInfoNotifyLink) parameterInfo;
+                        logger.info("Please confirm this login link on another device: " + link);
+                        String qr = QrCodeTerminal.getQr(link.getLink());
+                        logger.info(qr);
+                        return "";
+                    }
+                    case ASK_PASSWORD -> {
+                        return props.getPassword();
+                    }
+                    case null, default -> {
+                        logger.info("Parameter request: " + parameterInfo);
+                        return null;
+                    }
+                }
+            }));
 
-        for(var groups: all.stream().collect(Collectors.groupingBy(Messages::getTelegramChatId)).entrySet()) {
-            Long chatId = groups.getKey();
-            List<Message> messages = groups.getValue().stream().map(Messages::getSource).sorted(Comparator.comparing(MaybeInaccessibleMessage::date)).collect(Collectors.toList());
-
-            List<Message> olderMessages = messages.stream().filter(t -> new Date(t.date() * 1000L).before(threeDaysAgo)).toList();
-            for(Message m: olderMessages) {
-                messages.remove(m);
-                messagesRepository.deleteById(Long.valueOf(m.messageId()));
-            }
-
-            if (messages.size() < 50)
-                continue;
-
-            List<String> messagesString = messages.stream().map(this::toChatString).toList();
-            AtomicInteger counter = new AtomicInteger();
-            int chunkSize = 6000;
-            List<String> chatDumps = messagesString.stream().filter(Objects::nonNull).collect(Collectors.groupingBy(x -> counter.getAndAdd(x.length()) / chunkSize)).values()
-                    .stream().map(t-> String.join("", t)).toList();
-
-            String result = summarizeChatDumps(new ArrayList<>(chatDumps));
-            if (false) {
-                bot.execute(new SendMessage(chatId, result));
-                messagesRepository.deleteAllInBatch(groups.getValue());
-            }
+            this.client = clientBuilder.build(AuthenticationSupplier.qrCode());
         }
     }
 
@@ -113,12 +97,13 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 TdApi.UpdateDefaultBackground.class, TdApi.UpdateChatAddedToList.class, TdApi.UpdateStoryStealthMode.class, TdApi.UpdateChatUnreadMentionCount.class,
                 TdApi.UpdateFileDownloads.class, TdApi.UpdateChatReadInbox.class, TdApi.UpdateUserFullInfo.class, TdApi.UpdateMessageMentionRead.class, TdApi.UpdateChatReplyMarkup.class,
                 TdApi.UpdateDiceEmojis.class, TdApi.UpdateDeleteMessages.class, TdApi.UpdateMessageContent.class, TdApi.UpdateChatPhoto.class, TdApi.UpdateChatActiveStories.class,
-                TdApi.UpdateMessageIsPinned.class, TdApi.UpdateMessageIsPinned.class,
+                TdApi.UpdateMessageIsPinned.class, TdApi.UpdateMessageIsPinned.class, TdApi.MessageAnimatedEmoji.class, TdApi.MessagePoll.class,
                 TdApi.UpdateActiveEmojiReactions.class).forEach(classes::add);
 
         if (t instanceof TdApi.UpdateAuthorizationState) {
             TdApi.AuthorizationState authorizationState = ((TdApi.UpdateAuthorizationState) t).authorizationState;
-            if (authorizationState instanceof TdApi.AuthorizationStateReady) {
+            if (authorizationState instanceof TdApi.AuthorizationStateWaitPassword) {
+            } else if (authorizationState instanceof TdApi.AuthorizationStateReady) {
                 executorService.schedule(this::initUserClient, 5, TimeUnit.SECONDS);
             }
         } else if (classes.contains(t.getClass())) {
@@ -140,7 +125,7 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 function.chatId = l;
                 client.send(function).whenCompleteAsync((c, ignored1) -> {
                     logger.info("{} -> {} chat loaded", c.id, c.title);
-                    if ("Предпоследнее пристанище".equals(c.title)) {
+                    if (props.getChatname().equals(c.title)) {
                         fetchHistory(c);
                     }
                 });
@@ -149,20 +134,40 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
     }
 
     private void fetchHistory(TdApi.Chat c) {
-        fetchHistory(c, new TreeMap<>());
+        fetchHistory(c, new TreeMap<>(), null);
     }
 
-    private void fetchHistory(TdApi.Chat c, TreeMap<Long, TdApi.Message> messages) {
+    private void fetchHistory(TdApi.Chat c, TreeMap<Long, TdApi.Message> messages, Long idealMessage) {
         logger.info("Gathered {} messages", messages.size());
         if (messages.size() > 1) {
             Optional<TdApi.Message> any = messages.values().stream().filter(t -> {
-                boolean isOld = new Date(t.date * 1000L).toInstant().isBefore(Instant.now().minus(1, ChronoUnit.DAYS));
+                boolean isOld = new Date(t.date * 1000L).toInstant().isBefore(Instant.now().minus(3, ChronoUnit.DAYS));
                 boolean hasDigest = (t.content instanceof TdApi.MessageText) && ((TdApi.MessageText) t.content).text.text.contains("#дайджест");
                 return isOld || hasDigest;
             }).findAny();
             if (any.isPresent()) {
-                List<Long> badMessages = messages.entrySet().stream().takeWhile(t -> t.getValue() != any.get()).map(Map.Entry::getKey).toList();
+
+                String text = ((TdApi.MessageText)any.get().content).text.text;
+                String firstLine = text.lines().findFirst().orElse("");
+                if (firstLine.contains("$")) {
+                    String previousMessageId = firstLine.substring(firstLine.indexOf("$") + 1);
+                    idealMessage = Long.valueOf(previousMessageId);
+                }
+
+                if (idealMessage == null) {
+                    List<Long> badMessages = messages.entrySet().stream().takeWhile(t -> t.getValue() != any.get()).map(Map.Entry::getKey).toList();
+                    badMessages.forEach(messages::remove);
+                    messages.remove(any.get().id);
+                    enrichUsers(messages);
+                    return;
+                }
+            }
+
+            if (idealMessage != null && messages.containsKey(idealMessage)) {
+                long idealMessageUnboxed = idealMessage;
+                List<Long> badMessages = messages.entrySet().stream().takeWhile(t -> t.getKey() != idealMessageUnboxed).map(Map.Entry::getKey).toList();
                 badMessages.forEach(messages::remove);
+                messages.remove(any.get().id);
                 enrichUsers(messages);
                 return;
             }
@@ -176,21 +181,37 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
             function.fromMessageId = messages.firstKey();
         }
 
+        Long finalIdealMessage = idealMessage;
+
         client.send(function, a -> {
             TdApi.Messages messages1 = a.get();
-            for(TdApi.Message msg: messages1.messages) {
+            for (TdApi.Message msg : messages1.messages) {
                 messages.put(msg.id, msg);
             }
-            fetchHistory(c, messages);
+            fetchHistory(c, messages, finalIdealMessage);
         });
     }
 
-    private void enrichUsers(TreeMap<Long, TdApi.Message> messages, TreeMap<Long, TdApi.User> users, List<TdApi.GetUser> requests) {
+    private void enrichUsers
+            (TreeMap<Long, TdApi.Message> messages, TreeMap<Long, TdApi.User> users, List<TdApi.GetUser> requests) {
         if (requests.isEmpty()) {
-            String summarized = summarize(messages, users);
+            Long msgId = messages.lastEntry().getKey();
+            AtomicInteger counter = new AtomicInteger();
+            List<String> chatDumps = (
+                    (Map<Long, TdApi.Message>) messages)
+                    .values()
+                    .stream()
+                    .map(x -> this.toChatString(x, users))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.groupingBy(x -> counter.getAndAdd(x.length()) / chunkSize))
+                    .values()
+                    .stream().map(t -> String.join("", t)).toList();
+
+            String summarized = controller.summarizeChatDumps(new ArrayList<>(chatDumps));
             String messagesCount = getMessagesCountByUser(messages, users, 5);
 
-            String messageToCopyPaste = "#дайджест\n" + summarized + "\n\nВ основном писали:\n" + messagesCount;
+            String messageToCopyPaste = "#дайджест $" + msgId + "\n" + summarized + "\n\nВ основном писали:\n" + messagesCount;
+            logger.info("Message to post:\n{}", messageToCopyPaste);
 
             TdApi.SendMessage message = new TdApi.SendMessage();
             message.chatId = messages.values().stream().findFirst().orElse(null).chatId;
@@ -199,15 +220,25 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
             inputMessageContent.text = new TdApi.FormattedText(messageToCopyPaste, new TdApi.TextEntity[0]);
 
             message.inputMessageContent = inputMessageContent;
-            client.sendMessage(message, true);
-            System.exit(0);
+
+            if (!props.isSend()) {
+                System.exit(0);
+            }
+
+            client.sendMessage(message, false).whenComplete((a, b) -> new Thread(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                }
+                System.exit(0);
+            }).start());
             logger.info(messageToCopyPaste);
         } else {
             TdApi.GetUser getUser = requests.removeFirst();
             client.send(getUser, onUser -> {
                 TdApi.User user = onUser.get();
                 users.put(user.id, user);
-                enrichUsers(messages,users,requests);
+                enrichUsers(messages, users, requests);
             });
         }
     }
@@ -221,15 +252,9 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
     }
 
     int chunkSize = 8000;
-    private String summarize(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users) {
-        AtomicInteger counter = new AtomicInteger();
-        List<String> chatDumps = messages.values().stream().map(x->this.toChatString(x, users)).filter(Objects::nonNull).collect(Collectors.groupingBy(x -> counter.getAndAdd(x.length()) / chunkSize)).values()
-                .stream().map(t-> String.join("", t)).toList();
 
-        return summarizeChatDumps(new ArrayList<>(chatDumps));
-    }
-
-    private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users, int limit) {
+    private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users,
+                                          int limit) {
         AtomicInteger integer = new AtomicInteger(limit);
         return messages.values()
                 .stream()
@@ -243,55 +268,33 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
                 .collect(Collectors.joining("\n"));
     }
 
-    private String summarizeChatDumps(List<String> chatDumps) {
-        List<String> results = new ArrayList<>();
-        while(!chatDumps.isEmpty()) {
-            logger.info(String.format("Left chunks - %s", chatDumps.size()));
-            String chat = chatDumps.removeFirst();
-            String result = controller.getCompletion(chat, controller.SUMMARIZE_CHAT_PROMPT);
-
-            results.add(result);
-            logger.debug("chunk - " + result);
-        }
-
-        String together = String.join("\n", results);
-        if (!results.isEmpty()) {
-            return controller.getCompletion(together, controller.SUMMARIZE_N2_PROMPT);
-        }
-        return together;
-    }
-
-    private String toChatString(Message message) {
-        String content = null;
-        if (message.photo() != null) {
-            content = "!photo.jpg;";
-        }
-        if (message.video() != null) {
-            content = "!video.jpg";
-        }
-        if (message.text() != null) {
-            if (content == null)
-                content = "";
-            content += message.text();
-        }
-
-        if (content == null)
-            return null;
-
-        String sender = message.from().firstName() + " @" + message.from().username();
-        String date = new SimpleDateFormat().format(new Date(message.date() * 1000L));
-        return String.format("%s %s: %s\n", date, sender, content);
-    }
 
     private String toChatString(TdApi.Message message, Map<Long, TdApi.User> users) {
         String content = "<unsupported>";
         switch (message.content) {
             case TdApi.MessageText messageText -> content = messageText.text.text;
             case TdApi.MessagePhoto messagePhoto -> content = "!photo.jpg; " + messagePhoto.caption.text;
-            case TdApi.MessageSticker ignored -> { return null; }
-            case TdApi.MessageAnimation ignored -> { return null; }
-            case TdApi.MessageVideo ignored -> { return null; }
-            case TdApi.MessageVideoNote ignored -> { return null; }
+            case TdApi.MessageSticker ignored -> {
+                return null;
+            }
+            case TdApi.MessageAnimatedEmoji ignored -> {
+                return null;
+            }
+            case TdApi.MessageLocation ignored -> {
+                return null;
+            }
+            case TdApi.MessageDocument ignored -> {
+                return null;
+            }
+            case TdApi.MessageAnimation ignored -> {
+                return null;
+            }
+            case TdApi.MessageVideo ignored -> {
+                return null;
+            }
+            case TdApi.MessageVideoNote ignored -> {
+                return null;
+            }
             case null, default -> logger.warn("Unsupported content " + message.content);
         }
         Date date1 = new Date(message.date * 1000L);
@@ -319,9 +322,5 @@ public class TelegramUpdatesListener implements UpdatesListener, GenericUpdateHa
     @Override
     public void onException(Throwable throwable) {
         logger.error(throwable);
-    }
-
-    public void setBot(TelegramBot telegramBot) {
-        this.bot = telegramBot;
     }
 }
