@@ -19,6 +19,7 @@ spec:
           containers:
             - name: ollama
               image: ghcr.io/diverofdark/telegramsummarizer:master
+              imagePullPolicy: Always
               volumeMounts:
                 - mountPath: /ollama/
                   name: shared
