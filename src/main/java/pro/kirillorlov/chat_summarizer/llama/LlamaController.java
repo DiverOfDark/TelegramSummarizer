@@ -49,8 +49,10 @@ public class LlamaController {
     private void downloadModel(OllamaProperties props) throws Exception {
         String modelFile = Path.of(props.getOllamaLocalPath(), props.getOllamaModelShortFileName()).toString();
         if (!new File(modelFile).exists()) {
+            logger.info("Downloading model file to {}...", modelFile);
             LargeFileDownloader.downloadFile(props.getOllamaModelFile(), modelFile);
         }
+        logger.info("Downloaded, loading to Ollama...");
 
         // Create the HttpClient
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
@@ -86,7 +88,12 @@ public class LlamaController {
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        logger.info("Loaded, deleting file...");
+
         new File(modelFile).delete();
+
+        logger.info("Model loaded.");
     }
 
     public String summarizeChatDumps(List<String> chatDumps) {

@@ -27,6 +27,8 @@ spec:
                   value: http://ollama/
                 - name: USER_DATADIR
                   value: /ollama/userbot
+                - name: OLLAMA_PATH
+                  value: /ollama
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret
