@@ -18,13 +18,15 @@ spec:
                 claimName: ollama
           containers:
             - name: ollama
-              image: ollama/ollama:latest
+              image: ghcr.io/diverofdark/telegramsummarizer:master
               volumeMounts:
                 - mountPath: /ollama/
                   name: shared
               env:
                 - name: OLLAMA_URL
                   value: http://ollama/
+                - name: USER_DATADIR
+                  value: /ollama/userbot
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret
