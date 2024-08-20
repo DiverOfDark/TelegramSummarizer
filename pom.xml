@@ -76,11 +76,6 @@
             <artifactId>tdlight-natives</artifactId>
             <classifier>linux_amd64_gnu_ssl1</classifier>
         </dependency>
-        <dependency>
-            <groupId>it.tdlight</groupId>
-            <artifactId>tdlight-natives</artifactId>
-            <classifier>linux_amd64_gnu_ssl3</classifier>
-        </dependency>
         <!-- Example windows amd64 natives -->
         <dependency>
             <groupId>it.tdlight</groupId>
@@ -106,6 +101,14 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <requiresUnpack>
+                        <dependency>
+                            <groupId>it.tdlight</groupId>
+                            <artifactId>tdlight-natives</artifactId>
+                        </dependency>
+                    </requiresUnpack>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
