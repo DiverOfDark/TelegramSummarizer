@@ -11,6 +11,7 @@ spec:
           labels:
             app.kubernetes.io/app: chatsummarizer
         spec:
+          restartPolicy: OnFailure
           volumes:
             - name: shared
               persistentVolumeClaim:
