@@ -102,12 +102,17 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <requiresUnpack>
-                        <dependency>
-                            <groupId>it.tdlight</groupId>
-                            <artifactId>tdlight-natives</artifactId>
-                        </dependency>
-                    </requiresUnpack>
+                    <image>
+                        <buildpacks>
+                            <buildpack>paketobuildpacks/azul-zulu</buildpack>
+                            <buildpack>paketobuildpacks/java</buildpack>
+                        </buildpacks>
+
+                        <env>
+                            <BP_JVM_VERSION>21</BP_JVM_VERSION>
+                            <BP_JVM_TYPE>JRE</BP_JVM_TYPE>
+                        </env>
+                    </image>
                 </configuration>
             </plugin>
             <plugin>
