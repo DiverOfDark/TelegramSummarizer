@@ -58,8 +58,8 @@ public class LlamaController {
         logger.info("Downloaded, loading to Ollama...");
 
         ConnectionConfig connConfig = ConnectionConfig.custom()
-                .setConnectTimeout(15, TimeUnit.MINUTES)
-                .setSocketTimeout(15, TimeUnit.MINUTES)
+                .setConnectTimeout(2, TimeUnit.HOURS)
+                .setSocketTimeout(2, TimeUnit.HOURS)
                 .build();
         try(BasicHttpClientConnectionManager cm = new BasicHttpClientConnectionManager()) {
             cm.setConnectionConfig(connConfig);
