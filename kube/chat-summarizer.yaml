@@ -22,7 +22,7 @@ spec:
               image: ghcr.io/diverofdark/telegramsummarizer:master
               imagePullPolicy: Always
               volumeMounts:
-                - mountPath: /root/.ollama/
+                - mountPath: /models/
                   name: shared
               securityContext:
                 runAsUser: 0
@@ -33,9 +33,9 @@ spec:
                 - name: OLLAMA_URL
                   value: http://ollama
                 - name: USER_DATADIR
-                  value: /root/.ollama/userbot
+                  value: /models/userbot
                 - name: OLLAMA_PATH
-                  value: /root/.ollama/
+                  value: /models/
               envFrom:
                 - secretRef:
                     name: chatsummarizer-secret

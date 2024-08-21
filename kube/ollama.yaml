@@ -25,15 +25,19 @@ spec:
                       - niflheimr
                       - midgard
       volumes:
-        - name: shared
+        - name: models
           persistentVolumeClaim:
             claimName: ollama
+        - name: localdata
+          emptyDir: {}
       containers:
         - name: ollama
           image: ollama/ollama:latest
           volumeMounts:
             - mountPath: /root/.ollama
-              name: shared
+              name: localdata
+            - mountPath: /models
+              name: models
           resources:
             requests:
               memory: "8Gi"
