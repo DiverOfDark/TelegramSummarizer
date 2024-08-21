@@ -7,9 +7,11 @@ import dev.langchain4j.model.ollama.OllamaModel;
 import dev.langchain4j.model.ollama.OllamaModels;
 import dev.langchain4j.model.output.Response;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager;
 import org.apache.hc.core5.http.StreamClosedException;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.logging.log4j.LogManager;
@@ -26,6 +28,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class LlamaController {
@@ -54,44 +57,52 @@ public class LlamaController {
         }
         logger.info("Downloaded, loading to Ollama...");
 
-        // Create the HttpClient
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        ConnectionConfig connConfig = ConnectionConfig.custom()
+                .setConnectTimeout(15, TimeUnit.MINUTES)
+                .setSocketTimeout(15, TimeUnit.MINUTES)
+                .build();
+        try(BasicHttpClientConnectionManager cm = new BasicHttpClientConnectionManager()) {
+            cm.setConnectionConfig(connConfig);
 
-            // Create a POST request with the payload
-            HttpPost request = new HttpPost(props.getOllamaUrl() + "/api/create");
-            request.setHeader("Content-Type", "application/json");
-            HashMap<String, String> requestParams = new HashMap<>();
-            requestParams.put("name", props.getOllamaModelShortName());
-            requestParams.put("modelfile", "FROM " + modelFile);
+            // Create the HttpClient
+            try (CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(cm).build()) {
+                // Create a POST request with the payload
+                HttpPost request = new HttpPost(props.getOllamaUrl() + "/api/create");
+                request.setHeader("Content-Type", "application/json");
+                HashMap<String, String> requestParams = new HashMap<>();
+                requestParams.put("name", props.getOllamaModelShortName());
+                requestParams.put("modelfile", "FROM " + modelFile);
 
-            String requestString = Json.toJson(requestParams);
+                String requestString = Json.toJson(requestParams);
 
-            request.setEntity(new StringEntity(requestString));
+                request.setEntity(new StringEntity(requestString));
 
-            // Execute the request and handle the response
-            try (CloseableHttpResponse response = httpClient.execute(request);
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()), 64)) {
+                // Execute the request and handle the response
+                try (CloseableHttpResponse response = httpClient.execute(request);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()), 16)) {
 
-                try {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        // Process each line of the response as it arrives
-                        try {
-                            HashMap hashMap = Json.fromJson(line, HashMap.class);
-                            String status = (String) hashMap.get("status");
-                            logger.info("Progress: {}", status);
-                        } catch (Exception e) {
-                            logger.error("Error parsing response: {}", line);
-                            throw e;
+                    try {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            // Process each line of the response as it arrives
+                            try {
+                                HashMap hashMap = Json.fromJson(line, HashMap.class);
+                                String status = (String) hashMap.get("status");
+                                logger.info("Progress: {}", status);
+                            } catch (Exception e) {
+                                logger.error("Error parsing response: {}", line);
+                                throw e;
+                            }
                         }
-                    }
 
-                } catch (StreamClosedException e) { }
+                    } catch (StreamClosedException e) {
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
         logger.info("Checking that new model is available");

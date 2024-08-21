@@ -4,6 +4,7 @@ metadata:
   name: chatsummarizer
 spec:
   schedule: "0 19 * * *"
+  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       template:
@@ -23,7 +24,12 @@ spec:
               volumeMounts:
                 - mountPath: /root/.ollama/
                   name: shared
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
               env:
+                - name: USER_SEND
+                  value: "true"
                 - name: OLLAMA_URL
                   value: http://ollama
                 - name: USER_DATADIR
