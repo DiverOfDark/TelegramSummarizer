@@ -112,10 +112,6 @@ public class LlamaController {
             throw new Exception("Model not available after upload");
         }
 
-        logger.info("Available, deleting file...");
-
-        new File(modelFile).delete();
-
         logger.info("Model loaded.");
     }
 
