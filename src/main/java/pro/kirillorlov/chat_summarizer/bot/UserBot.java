@@ -12,11 +12,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import org.springframework.util.FileCopyUtils;
+import org.springframework.util.FileSystemUtils;
 import pro.kirillorlov.chat_summarizer.llama.LlamaController;
 import pro.kirillorlov.chat_summarizer.properties.UserBotProperties;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -39,7 +44,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
 
     private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 
-    public UserBot(LlamaController controller, UserBotProperties props) throws UnsupportedNativeLibraryException {
+    public UserBot(LlamaController controller, UserBotProperties props) throws UnsupportedNativeLibraryException, IOException {
         this.controller = controller;
         this.props = props;
 
@@ -49,7 +54,23 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         TDLibSettings settings = TDLibSettings.create(apiToken);
 
         Path sessionPath = Paths.get(props.getDatadir());
-        settings.setDatabaseDirectoryPath(sessionPath.resolve("data"));
+        settings.setFileDatabaseEnabled(true);
+        Path persistentDataPath = sessionPath.resolve("data");
+
+        Path tempDir = Files.createTempDirectory("tempDir");
+        logger.info("Copying everything from {} to {}", persistentDataPath, tempDir);
+        FileSystemUtils.copyRecursively(persistentDataPath, tempDir);
+        logger.info("Copied");
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                logger.info("Copying everything from {} to {}", tempDir, persistentDataPath);
+                FileSystemUtils.copyRecursively(tempDir, persistentDataPath);
+                logger.info("Copied");
+            } catch (IOException e) {
+            }
+        }));
+
+        settings.setDatabaseDirectoryPath(tempDir);
         settings.setDownloadedFilesDirectoryPath(sessionPath.resolve("downloads"));
 
         try (SimpleTelegramClientFactory simpleTelegramClientFactory = new SimpleTelegramClientFactory()) {
