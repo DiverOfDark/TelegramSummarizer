@@ -46,7 +46,12 @@ public class LlamaController {
         if (listResponse.stream().noneMatch(t -> t.getName().contains(props.getOllamaModelShortName()))) {
             downloadModel(props);
         }
-        languageModel = OllamaLanguageModel.builder().baseUrl(props.getOllamaUrl()).modelName(props.getOllamaModelShortName()).timeout(Duration.ofMinutes(10)).build();
+        languageModel = OllamaLanguageModel
+                .builder()
+                .baseUrl(props.getOllamaUrl())
+                .modelName(props.getOllamaModelShortName())
+                .timeout(Duration.ofMinutes(30))
+                .build();
     }
 
     private void downloadModel(OllamaProperties props) throws Exception {
