@@ -63,10 +63,13 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         logger.info("Copied");
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
+                client.close();
                 logger.info("Copying everything from {} to {}", tempDir, persistentDataPath);
                 FileSystemUtils.copyRecursively(tempDir, persistentDataPath);
                 logger.info("Copied");
-            } catch (IOException e) {
+                Thread.sleep(1000);
+                logger.info("Copied");
+            } catch (Exception e) {
             }
         }));
 
