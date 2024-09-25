@@ -40,7 +40,13 @@ public class LlamaController {
 
     public LlamaController(OllamaProperties props) throws Exception {
         this.props = props;
-        models = OllamaModels.builder().baseUrl(props.getOllamaUrl()).build();
+
+        models = new OllamaModels(props.getOllamaUrl(),
+                Duration.ofSeconds(60),
+                3,
+                true,
+                true
+                );
 
         List<OllamaModel> listResponse = models.availableModels().content();
         if (listResponse.stream().noneMatch(t -> t.getName().contains(props.getOllamaModelShortName()))) {
