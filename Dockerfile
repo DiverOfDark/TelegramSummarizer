@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM eclipse-temurin:21.0.4_7-jdk-alpine as build
+FROM eclipse-temurin:21.0.5_11-jdk-alpine as build
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -19,7 +19,7 @@ COPY src ./src
 RUN ./mvnw clean package
 
 # Stage 2: Run the application
-FROM eclipse-temurin:21.0.4_7-jre-alpine
+FROM eclipse-temurin:21.0.5_11-jre-alpine
 
 # Set the working directory inside the container
 WORKDIR /app
