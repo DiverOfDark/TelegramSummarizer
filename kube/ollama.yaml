@@ -24,6 +24,7 @@ spec:
                     values:
                       - niflheimr
                       - midgard
+                      - jotunheimr
       volumes:
         - name: models
           persistentVolumeClaim:
