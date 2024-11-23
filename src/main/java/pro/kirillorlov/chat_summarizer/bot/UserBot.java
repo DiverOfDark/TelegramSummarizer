@@ -275,7 +275,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         enrichUsers(messages, users, requests);
     }
 
-    int chunkSize = 8000;
+    int chunkSize = 4000;
 
     private String getMessagesCountByUser(Map<Long, TdApi.Message> messages, Map<Long, TdApi.User> users,
                                           int limit) {
