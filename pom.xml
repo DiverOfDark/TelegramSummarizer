@@ -73,6 +73,11 @@
         <dependency>
             <groupId>it.tdlight</groupId>
             <artifactId>tdlight-natives</artifactId>
+            <classifier>linux_amd64_gnu_ssl1</classifier>
+        </dependency>
+        <dependency>
+            <groupId>it.tdlight</groupId>
+            <artifactId>tdlight-natives</artifactId>
             <classifier>linux_amd64_gnu_ssl3</classifier>
         </dependency>
         <dependency>
