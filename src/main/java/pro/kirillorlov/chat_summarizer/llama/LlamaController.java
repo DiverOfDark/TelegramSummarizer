@@ -98,7 +98,7 @@ public class LlamaController {
                             // Process each line of the response as it arrives
                             try {
                                 HashMap hashMap = Json.fromJson(line, HashMap.class);
-                                String status = (String) hashMap.get("status");
+                                String status = String.valueOf(hashMap.get("status"));
                                 logger.info("Progress: {}", status);
                             } catch (Exception e) {
                                 logger.error("Error parsing response: {}", line);
