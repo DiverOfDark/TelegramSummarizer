@@ -159,9 +159,9 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
     private void fetchHistory(TdApi.Chat c, TreeMap<Long, TdApi.Message> messages, Long idealMessage) {
         logger.info("Gathered {} messages", messages.size());
         if (messages.size() > 1) {
-            Optional<TdApi.Message> any = messages.values().stream().filter(t -> {
+            Optional<TdApi.Message> any = messages.values().stream().filter(t-> t.content instanceof TdApi.MessageText).filter(t -> {
                 boolean isOld = new Date(t.date * 1000L).toInstant().isBefore(Instant.now().minus(3, ChronoUnit.DAYS));
-                boolean hasDigest = (t.content instanceof TdApi.MessageText) && ((TdApi.MessageText) t.content).text.text.contains("#дайджест");
+                boolean hasDigest = ((TdApi.MessageText) t.content).text.text.contains("#дайджест");
                 return isOld || hasDigest;
             }).findAny();
             if (any.isPresent()) {
