@@ -12,16 +12,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import org.springframework.util.FileCopyUtils;
-import org.springframework.util.FileSystemUtils;
 import pro.kirillorlov.chat_summarizer.llama.LlamaController;
 import pro.kirillorlov.chat_summarizer.properties.UserBotProperties;
 
+import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -33,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.apache.tomcat.util.http.fileupload.FileUtils.deleteDirectory;
 
 @Component
 @Profile("userbot")
@@ -49,7 +48,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         this.props = props;
 
         Init.init();
-        Log.setLogMessageHandler(1, new Slf4JLogMessageHandler());
+        Log.setLogMessageHandler(2, new Slf4JLogMessageHandler());
         APIToken apiToken = APIToken.example();
         TDLibSettings settings = TDLibSettings.create(apiToken);
 
@@ -57,23 +56,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         settings.setFileDatabaseEnabled(true);
         Path persistentDataPath = sessionPath.resolve("data");
 
-        Path tempDir = Files.createTempDirectory("tempDir");
-        logger.info("Copying everything from {} to {}", persistentDataPath, tempDir);
-        FileSystemUtils.copyRecursively(persistentDataPath, tempDir);
-        logger.info("Copied");
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                client.close();
-                logger.info("Copying everything from {} to {}", tempDir, persistentDataPath);
-                FileSystemUtils.copyRecursively(tempDir, persistentDataPath);
-                logger.info("Copied");
-                Thread.sleep(1000);
-                logger.info("Copied");
-            } catch (Exception e) {
-            }
-        }));
-
-        settings.setDatabaseDirectoryPath(tempDir);
+        settings.setDatabaseDirectoryPath(persistentDataPath);
         settings.setDownloadedFilesDirectoryPath(sessionPath.resolve("downloads"));
 
         try (SimpleTelegramClientFactory simpleTelegramClientFactory = new SimpleTelegramClientFactory()) {
@@ -122,13 +105,26 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
                 TdApi.UpdateFileDownloads.class, TdApi.UpdateChatReadInbox.class, TdApi.UpdateUserFullInfo.class, TdApi.UpdateMessageMentionRead.class, TdApi.UpdateChatReplyMarkup.class,
                 TdApi.UpdateDiceEmojis.class, TdApi.UpdateDeleteMessages.class, TdApi.UpdateMessageContent.class, TdApi.UpdateChatPhoto.class, TdApi.UpdateChatActiveStories.class,
                 TdApi.UpdateMessageIsPinned.class, TdApi.UpdateMessageIsPinned.class, TdApi.MessageAnimatedEmoji.class, TdApi.MessagePoll.class,
-                TdApi.UpdateActiveEmojiReactions.class).forEach(classes::add);
+                TdApi.UpdateActiveEmojiReactions.class, TdApi.MessageVoiceNote.class, TdApi.UpdateAvailableMessageEffects.class, TdApi.UpdateChatViewAsTopics.class, TdApi.UpdateChatTheme.class,
+                TdApi.UpdateSuggestedActions.class, TdApi.UpdateReactionNotificationSettings.class
+        ).forEach(classes::add);
 
         if (t instanceof TdApi.UpdateAuthorizationState) {
             TdApi.AuthorizationState authorizationState = ((TdApi.UpdateAuthorizationState) t).authorizationState;
-            if (authorizationState instanceof TdApi.AuthorizationStateWaitPassword) {
-            } else if (authorizationState instanceof TdApi.AuthorizationStateReady) {
-                executorService.schedule(this::initUserClient, 5, TimeUnit.SECONDS);
+            switch (authorizationState) {
+                case TdApi.AuthorizationStateLoggingOut ignored -> {
+                    try {
+                        deleteDirectory(new File(props.getDatadir()));
+                    } catch (IOException e) {
+                        logger.error(e);
+                    }
+                    System.exit(1);
+                }
+                case TdApi.AuthorizationStateClosed ignored -> { }
+                case TdApi.AuthorizationStateWaitPassword ignored -> { }
+                case TdApi.AuthorizationStateReady ignored ->
+                    executorService.schedule(this::initUserClient, 10, TimeUnit.SECONDS);
+                case null, default -> { }
             }
         } else if (classes.contains(t.getClass())) {
             logger.debug(t);
@@ -142,7 +138,6 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         TdApi.GetChats getChats = new TdApi.GetChats();
         getChats.limit = 1000;
         logger.info("Init user client");
-
         client.send(getChats).whenCompleteAsync((a, ignored) -> {
             for (long l : a.chatIds) {
                 TdApi.GetChat function = new TdApi.GetChat();
@@ -171,7 +166,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
             }).findAny();
             if (any.isPresent()) {
 
-                String text = ((TdApi.MessageText)any.get().content).text.text;
+                String text = ((TdApi.MessageText) any.get().content).text.text;
                 String firstLine = text.lines().findFirst().orElse("");
                 if (firstLine.contains("$")) {
                     String previousMessageId = firstLine.substring(firstLine.indexOf("$") + 1);
