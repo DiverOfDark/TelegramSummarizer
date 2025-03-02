@@ -27,6 +27,11 @@ spec:
               securityContext:
                 runAsUser: 0
                 runAsGroup: 0
+              resources:
+                requests:
+                  memory: "128Mi"
+                limits:
+                  memory: "1Gi"
               env:
                 - name: USER_SEND
                   value: "true"
