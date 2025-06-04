@@ -29,6 +29,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.apache.tomcat.util.http.fileupload.FileUtils.deleteDirectory;
@@ -232,26 +233,41 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
             String messageToCopyPaste = "#дайджест $" + msgId + "\n" + summarized + "\n\nВ основном писали:\n" + messagesCount;
             logger.info("Message to post:\n{}", messageToCopyPaste);
 
-            TdApi.SendMessage message = new TdApi.SendMessage();
-            message.chatId = messages.values().stream().findFirst().orElse(null).chatId;
+            int chunkSize = 4000; // 4096 is limit but...
 
-            TdApi.InputMessageText inputMessageContent = new TdApi.InputMessageText();
-            inputMessageContent.text = new TdApi.FormattedText(messageToCopyPaste, new TdApi.TextEntity[0]);
-
-            message.inputMessageContent = inputMessageContent;
+            List<String> chunks = IntStream.range(0, (messageToCopyPaste.length() + (chunkSize - 1)) / chunkSize)
+                    .mapToObj(i -> messageToCopyPaste.substring(i * chunkSize, Math.min((i + 1) * chunkSize, messageToCopyPaste.length())))
+                    .toList();
 
             if (!props.isSend()) {
                 System.exit(0);
             }
 
-            client.sendMessage(message, false).whenComplete((a, b) -> new Thread(() -> {
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                }
-                System.exit(0);
-            }).start());
-            logger.info(messageToCopyPaste);
+            AtomicInteger chunkCounter = new AtomicInteger(chunks.size());
+
+            for(String chunk : chunks) {
+                TdApi.SendMessage message = new TdApi.SendMessage();
+                message.chatId = messages.values().stream().findFirst().orElse(null).chatId;
+
+                TdApi.InputMessageText inputMessageContent = new TdApi.InputMessageText();
+                inputMessageContent.text = new TdApi.FormattedText(chunk, new TdApi.TextEntity[0]);
+
+                message.inputMessageContent = inputMessageContent;
+
+                client.sendMessage(message, false).whenComplete((a, b) -> new Thread(() -> {
+                    var leftChunks = chunkCounter.decrementAndGet();
+                    logger.info("Left chunks: {}", leftChunks);
+                    if (leftChunks == 0) {
+                        try {
+                            Thread.sleep(5000);
+                        } catch (InterruptedException e) {
+                        }
+                        logger.info("All chunks sent, exiting...");
+                        System.exit(0);
+                    }
+                }).start());
+                logger.info(messageToCopyPaste);
+            }
         } else {
             TdApi.GetUser getUser = requests.removeFirst();
             client.send(getUser, onUser -> {
