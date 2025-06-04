@@ -22,9 +22,7 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: In
                     values:
-                      - niflheimr
-                      - midgard
-                      - jotunheimr
+                      - asgard
       volumes:
         - name: models
           persistentVolumeClaim:
@@ -41,7 +39,9 @@ spec:
               name: models
           resources:
             requests:
-              memory: "8Gi"
+              memory: "12Gi"
+            limits:
+              memory: "12Gi"
           ports:
             - name: http
               protocol: TCP
