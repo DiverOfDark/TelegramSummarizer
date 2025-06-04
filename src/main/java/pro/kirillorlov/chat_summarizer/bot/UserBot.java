@@ -162,7 +162,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         if (messages.size() > 1) {
             Optional<TdApi.Message> any = messages.values().stream().filter(t-> t.content instanceof TdApi.MessageText).filter(t -> {
                 boolean isOld = new Date(t.date * 1000L).toInstant().isBefore(Instant.now().minus(3, ChronoUnit.DAYS));
-                boolean hasDigest = ((TdApi.MessageText) t.content).text.text.contains("#дайджест");
+                boolean hasDigest = ((TdApi.MessageText) t.content).text.text.contains("#дайджест") && (!(t.sendingState instanceof TdApi.MessageSendingStateFailed));
                 return isOld || hasDigest;
             }).findAny();
             if (any.isPresent()) {
@@ -217,8 +217,7 @@ public class UserBot implements GenericUpdateHandler<TdApi.Update>, ExceptionHan
         if (requests.isEmpty()) {
             Long msgId = messages.lastEntry().getKey();
             AtomicInteger counter = new AtomicInteger();
-            List<String> chatDumps = (
-                    (Map<Long, TdApi.Message>) messages)
+            List<String> chatDumps = messages
                     .values()
                     .stream()
                     .map(x -> this.toChatString(x, users))
