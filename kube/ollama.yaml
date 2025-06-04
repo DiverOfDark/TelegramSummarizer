@@ -32,7 +32,7 @@ spec:
       containers:
         - name: ollama
           image: ollama/ollama:latest
-          env::
+          env:
             - name: OMP_NUM_THREADS
               value: "12"
           volumeMounts:
